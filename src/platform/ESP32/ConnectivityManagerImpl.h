@@ -32,12 +32,26 @@
 
 #include "esp_event.h"
 
+    /*  JLIZI   */
+#include "esp_mesh.h"
+#include "esp_wifi_netif.h"
+#define MAC_ADDR_LEN (6u)
+#define MAC_ADDR_EQUAL(a, b) (0 == memcmp(a, b, MAC_ADDR_LEN))
+    /*  JLIZI   */
+
 namespace Inet {
 class IPAddress;
 } // namespace Inet
 
 namespace chip {
 namespace DeviceLayer {
+
+    /*  JLIZI   */
+typedef struct mesh_netif_driver {
+    esp_netif_driver_base_t base;
+    uint8_t sta_mac_addr[MAC_ADDR_LEN];
+}* mesh_netif_driver_t;
+    /*  JLIZI   */
 
 class PlatformManagerImpl;
 
@@ -58,7 +72,13 @@ class ConnectivityManagerImpl final : public ConnectivityManager,
     // Allow the ConnectivityManager interface class to delegate method calls to
     // the implementation methods provided by this class.
     friend class ConnectivityManager;
-
+    /*  JLIZI   */
+public:
+    void mesh_netif_init_station(void);
+    esp_err_t mesh_netifs_start(bool is_root);
+    esp_err_t mesh_netifs_stop(void);
+    mesh_netif_driver_t mesh_create_if_driver(bool is_ap, bool is_root);
+    /*  JLIZI   */
 private:
     using Flags = GenericConnectivityManagerImpl_WiFi::ConnectivityFlags;
     // ===== Members that implement the ConnectivityManager abstract interface.
