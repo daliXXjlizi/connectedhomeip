@@ -139,7 +139,7 @@ exit:
 
 CHIP_ERROR ESP32Utils::SetAPMode(bool enabled)
 {
-    CHIP_ERROR err;
+    CHIP_ERROR err = ESP_OK;
     wifi_mode_t curWiFiMode, targetWiFiMode;
 
     targetWiFiMode = (enabled) ? WIFI_MODE_APSTA : WIFI_MODE_STA;
@@ -165,7 +165,6 @@ CHIP_ERROR ESP32Utils::SetAPMode(bool enabled)
         }
         SuccessOrExit(err);
     }
-
 exit:
     return err;
 }

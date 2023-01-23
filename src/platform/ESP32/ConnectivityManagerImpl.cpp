@@ -41,6 +41,10 @@
 
 #include <type_traits>
 
+#ifdef CONFIG_MESH_DEVICE
+#include "esp_mesh.h"
+#endif
+
 #if !CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION
 #error "WiFi Station support must be enabled when building for ESP32"
 #endif
@@ -56,6 +60,15 @@ using namespace ::chip::TLV;
 
 namespace chip {
 namespace DeviceLayer {
+
+#ifdef CONFIG_MESH_DEVICE
+static const char *MESH_TAG = "mesh_main";
+static const uint8_t MESH_ID[6] = { 0x77, 0x77, 0x77, 0x77, 0x77, 0x76};
+static int mesh_layer = -1;
+static esp_ip4_addr_t s_current_ip;
+    static mesh_addr_t mesh_parent_addr;
+mesh_cfg_t cfgM = MESH_INIT_CONFIG_DEFAULT();
+#endif
 
 ConnectivityManagerImpl ConnectivityManagerImpl::sInstance;
 
@@ -408,7 +421,7 @@ CHIP_ERROR ConnectivityManagerImpl::_Init()
     // Ensure that ESP station mode is enabled.
     err = Internal::ESP32Utils::EnableStationMode();
     SuccessOrExit(err);
-
+#ifndef CONFIG_MESH_DEVICE
     // If there is no persistent station provision...
     if (!IsWiFiStationProvisioned())
     {
@@ -443,6 +456,23 @@ CHIP_ERROR ConnectivityManagerImpl::_Init()
             SuccessOrExit(err);
         }
     }
+#else
+esp_wifi_start();
+esp_mesh_init();
+memcpy((uint8_t *) &cfgM.mesh_id, MESH_ID, 6);
+cfgM.channel = CONFIG_MESH_CHANNEL;
+cfgM.allow_channel_switch = true ;
+cfgM.router.ssid_len = strlen(CONFIG_MESH_ROUTER_SSID);
+memcpy((uint8_t *) &cfgM.router.ssid, CONFIG_MESH_ROUTER_SSID, cfgM.router.ssid_len);
+memcpy((uint8_t *) &cfgM.router.password, CONFIG_MESH_ROUTER_PASSWD,
+           strlen(CONFIG_MESH_ROUTER_PASSWD));
+ESP_ERROR_CHECK(esp_mesh_set_ap_authmode(WIFI_AUTH_WPA2_PSK));
+cfgM.mesh_ap.max_connection = CONFIG_MESH_AP_CONNECTIONS;
+memcpy((uint8_t *) &cfgM.mesh_ap.password, CONFIG_MESH_AP_PASSWD,
+           strlen(CONFIG_MESH_AP_PASSWD));
+ESP_ERROR_CHECK(esp_mesh_set_config(&cfgM));
+ESP_ERROR_CHECK(esp_mesh_start());
+#endif
 
     // Force AP mode off for now.
     err = Internal::ESP32Utils::SetAPMode(false);
@@ -451,8 +481,10 @@ CHIP_ERROR ConnectivityManagerImpl::_Init()
     // Queue work items to bootstrap the AP and station state machines once the Chip event loop is running.
     err = SystemLayer.ScheduleWork(DriveStationState, NULL);
     SuccessOrExit(err);
+    #ifndef CONFIG_MESH_DEVICE
     err = SystemLayer.ScheduleWork(DriveAPState, NULL);
     SuccessOrExit(err);
+    #endif
 
 exit:
     return err;
@@ -463,6 +495,146 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
     // Handle ESP system events...
     if (event->Type == DeviceEventType::kESPSystemEvent)
     {
+#ifdef CONFIG_MESH_DEVICE
+        if (event->Platform.ESPSystemEvent.Base == MESH_EVENT)
+        {
+            mesh_addr_t id = {0,};
+            static uint8_t last_layer = 0;
+            switch (event->Platform.ESPSystemEvent.Id)
+            {
+            case MESH_EVENT_STARTED: 
+                esp_mesh_get_id(&id);
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_MESH_STARTED>ID:" MACSTR "", MAC2STR(id.addr));
+                mesh_layer = esp_mesh_get_layer();
+                break;
+            case MESH_EVENT_STOPPED: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_STOPPED>");
+                mesh_layer = esp_mesh_get_layer();
+                break;
+            case MESH_EVENT_CHILD_CONNECTED: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_CHILD_CONNECTED>aid:%d, " MACSTR "",
+                        event->Platform.ESPSystemEvent.Data.child_connected.aid,
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.child_connected.mac));
+                break;
+            case MESH_EVENT_CHILD_DISCONNECTED: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_CHILD_DISCONNECTED>aid:%d, " MACSTR "",
+                        event->Platform.ESPSystemEvent.Data.child_disconnected.aid,
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.child_disconnected.mac));
+                break;
+            case MESH_EVENT_ROUTING_TABLE_ADD: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_ADD>add %d, new:%d", \
+                        event->Platform.ESPSystemEvent.Data.routing_table.rt_size_change, \
+                        event->Platform.ESPSystemEvent.Data.routing_table.rt_size_new);
+                break;
+            case MESH_EVENT_ROUTING_TABLE_REMOVE: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_REMOVE>remove %d, new:%d",
+                        event->Platform.ESPSystemEvent.Data.routing_table.rt_size_change,
+                        event->Platform.ESPSystemEvent.Data.routing_table.rt_size_new);
+                break;
+            case MESH_EVENT_NO_PARENT_FOUND: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_NO_PARENT_FOUND>scan times:%d",
+                        event->Platform.ESPSystemEvent.Data.no_parent.scan_times);
+                /* TODO handler for the failure */
+                break;
+            case MESH_EVENT_PARENT_CONNECTED: 
+                esp_mesh_get_id(&id);
+                mesh_layer = event->Platform.ESPSystemEvent.Data.connected.self_layer;
+                memcpy(&mesh_parent_addr.addr, event->Platform.ESPSystemEvent.Data.connected.connected.bssid, 6);
+                ESP_LOGI(MESH_TAG,
+                        "<MESH_EVENT_PARENT_CONNECTED>layer:%d-->%d, parent:" MACSTR "%s, ID:" MACSTR "",
+                        last_layer, mesh_layer, MAC2STR(mesh_parent_addr.addr),
+                        esp_mesh_is_root() ? "<ROOT>" :
+                        (mesh_layer == 2) ? "<layer2>" : "", MAC2STR(id.addr));
+                last_layer = (uint8_t)mesh_layer;
+                mesh_netifs_start(esp_mesh_is_root());
+                break;
+            case MESH_EVENT_PARENT_DISCONNECTED: 
+                ESP_LOGI(MESH_TAG,
+                        "<MESH_EVENT_PARENT_DISCONNECTED>reason:%d",
+                        event->Platform.ESPSystemEvent.Data.disconnected.reason);
+                mesh_layer = esp_mesh_get_layer();
+                mesh_netifs_stop();
+                break;
+            case MESH_EVENT_LAYER_CHANGE: 
+                mesh_layer = event->Platform.ESPSystemEvent.Data.layer_change.new_layer;
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_LAYER_CHANGE>layer:%d-->%d%s",
+                        last_layer, mesh_layer,
+                        esp_mesh_is_root() ? "<ROOT>" :
+                        (mesh_layer == 2) ? "<layer2>" : "");
+                last_layer = (uint8_t)mesh_layer;
+                break;
+            case MESH_EVENT_ROOT_ADDRESS: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROOT_ADDRESS>root address:" MACSTR "",
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.root_addr.addr));
+                break;
+            case MESH_EVENT_VOTE_STARTED: 
+                ESP_LOGI(MESH_TAG,
+                        "<MESH_EVENT_VOTE_STARTED>attempts:%d, reason:%d, rc_addr:" MACSTR "",
+                        event->Platform.ESPSystemEvent.Data.vote_started.attempts,
+                        event->Platform.ESPSystemEvent.Data.vote_started.reason,
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.vote_started.rc_addr.addr));
+                break;
+            case MESH_EVENT_VOTE_STOPPED: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_VOTE_STOPPED>");
+                break;
+            case MESH_EVENT_ROOT_SWITCH_REQ: 
+                ESP_LOGI(MESH_TAG,
+                        "<MESH_EVENT_ROOT_SWITCH_REQ>reason:%d, rc_addr:" MACSTR "",
+                        event->Platform.ESPSystemEvent.Data.switch_req.reason,
+                        MAC2STR( event->Platform.ESPSystemEvent.Data.switch_req.rc_addr.addr));
+                break;
+            case MESH_EVENT_ROOT_SWITCH_ACK: 
+                /* new root */
+                mesh_layer = esp_mesh_get_layer();
+                esp_mesh_get_parent_bssid(&mesh_parent_addr);
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROOT_SWITCH_ACK>layer:%d, parent:" MACSTR "", mesh_layer, MAC2STR(mesh_parent_addr.addr));
+                break;
+            case MESH_EVENT_TODS_STATE: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_TODS_REACHABLE>state:%d", event->Platform.ESPSystemEvent.Data.toDS_state);
+                break;
+            case MESH_EVENT_ROOT_FIXED: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROOT_FIXED>%s",
+                        event->Platform.ESPSystemEvent.Data.root_fixed.is_fixed ? "fixed" : "not fixed");
+                break;
+            case MESH_EVENT_ROOT_ASKED_YIELD: 
+                ESP_LOGI(MESH_TAG,
+                        "<MESH_EVENT_ROOT_ASKED_YIELD>" MACSTR ", rssi:%d, capacity:%d",
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.root_conflict.addr),
+                        event->Platform.ESPSystemEvent.Data.root_conflict.rssi,
+                        event->Platform.ESPSystemEvent.Data.root_conflict.capacity);
+                break;
+            case MESH_EVENT_CHANNEL_SWITCH: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_CHANNEL_SWITCH>new channel:%d", 
+                event->Platform.ESPSystemEvent.Data.channel_switch.channel);
+                break;
+            case MESH_EVENT_SCAN_DONE: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_SCAN_DONE>number:%d",
+                        event->Platform.ESPSystemEvent.Data.scan_done.number);
+                break;
+            case MESH_EVENT_NETWORK_STATE: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_NETWORK_STATE>is_rootless:%d",
+                        event->Platform.ESPSystemEvent.Data.network_state.is_rootless);
+                break;
+            case MESH_EVENT_STOP_RECONNECTION: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_STOP_RECONNECTION>");
+                break;
+            case MESH_EVENT_FIND_NETWORK: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_FIND_NETWORK>new channel:%d, router BSSID:" MACSTR "",
+                        event->Platform.ESPSystemEvent.Data.find_network.channel,
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.find_network.router_bssid));
+                break;
+            case MESH_EVENT_ROUTER_SWITCH: 
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROUTER_SWITCH>new router:%s, channel:%d, " MACSTR "", \
+                        event->Platform.ESPSystemEvent.Data.router_switch.ssid, \
+                        event->Platform.ESPSystemEvent.Data.router_switch.channel, \
+                        MAC2STR(event->Platform.ESPSystemEvent.Data.router_switch.bssid));
+                break;
+            default:
+                ESP_LOGI(MESH_TAG, "unknown id:%d", event->Platform.ESPSystemEvent.Id);
+                break;
+            }
+        }
+#endif
         if (event->Platform.ESPSystemEvent.Base == WIFI_EVENT)
         {
             switch (event->Platform.ESPSystemEvent.Id)
@@ -517,6 +689,7 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
             case IP_EVENT_STA_GOT_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_GOT_IP");
                 OnStationIPv4AddressAvailable(event->Platform.ESPSystemEvent.Data.IpGotIp);
+                //esp_mesh_start();
                 break;
             case IP_EVENT_STA_LOST_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_LOST_IP");

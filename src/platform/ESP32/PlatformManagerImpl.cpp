@@ -37,6 +37,9 @@
 #include "esp_system.h"
 #include "esp_wifi.h"
 
+#ifdef CONFIG_MESH_DEVICE
+#include "esp_mesh.h"
+#endif
 namespace chip {
 namespace DeviceLayer {
 
@@ -70,10 +73,14 @@ CHIP_ERROR PlatformManagerImpl::_InitChipStack(void)
     // Arrange for the ESP event loop to deliver events into the CHIP Device layer.
     err = esp_event_loop_create_default();
     SuccessOrExit(err);
-
+    #ifndef CONFIG_MESH_DEVICE
     esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
-
+    #else
+    ConnectivityManagerImpl().mesh_netif_init_station();
+    esp_event_handler_register(MESH_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
+    SuccessOrExit(err);
+    #endif
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
     SuccessOrExit(err);
     esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
@@ -180,7 +187,103 @@ void PlatformManagerImpl::HandleESPSystemEvent(void * arg, esp_event_base_t even
             break;
         }
     }
+#ifdef CONFIG_MESH_DEVICE
+    else if (eventBase == MESH_EVENT)
+    {
+        switch (eventId)
+        {
+        case MESH_EVENT_STARTED:
+            break;
+        case MESH_EVENT_STOPPED:
+            break;
+        case MESH_EVENT_CHILD_CONNECTED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.child_connected, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.child_connected));
+            break;
+        case MESH_EVENT_CHILD_DISCONNECTED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.child_disconnected, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.child_disconnected));
+            break;
+        case MESH_EVENT_ROUTING_TABLE_ADD:
+            memcpy(&event.Platform.ESPSystemEvent.Data.root_addr, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.root_addr));
+            break;
+        case MESH_EVENT_ROUTING_TABLE_REMOVE:
+            memcpy(&event.Platform.ESPSystemEvent.Data.routing_table, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.routing_table));
+            break;
+        case MESH_EVENT_NO_PARENT_FOUND:
+            memcpy(&event.Platform.ESPSystemEvent.Data.no_parent, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.no_parent));
+            break;
+        case MESH_EVENT_PARENT_CONNECTED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.connected, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.connected));
+            break;
+        case MESH_EVENT_PARENT_DISCONNECTED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.disconnected, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.disconnected));
+            break;
 
+        case MESH_EVENT_LAYER_CHANGE:
+            memcpy(&event.Platform.ESPSystemEvent.Data.layer_change, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.layer_change));
+            break;
+        case MESH_EVENT_ROOT_ADDRESS:
+            memcpy(&event.Platform.ESPSystemEvent.Data.root_addr, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.root_addr));
+            break;
+        case MESH_EVENT_VOTE_STARTED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.vote_started, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.vote_started));
+            break;
+        case MESH_EVENT_VOTE_STOPPED:
+            break;
+        case MESH_EVENT_ROOT_SWITCH_REQ:
+            memcpy(&event.Platform.ESPSystemEvent.Data.switch_req, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.switch_req));
+            break;
+        case MESH_EVENT_ROOT_SWITCH_ACK:
+            break;
+        case MESH_EVENT_TODS_STATE:
+            memcpy(&event.Platform.ESPSystemEvent.Data.toDS_state, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.toDS_state));
+            break;
+        case MESH_EVENT_ROOT_FIXED:
+            memcpy(&event.Platform.ESPSystemEvent.Data.root_fixed, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.root_fixed));
+            break;
+        case MESH_EVENT_ROOT_ASKED_YIELD:
+            memcpy(&event.Platform.ESPSystemEvent.Data.root_conflict, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.root_conflict));
+            break;
+        case MESH_EVENT_CHANNEL_SWITCH:
+            memcpy(&event.Platform.ESPSystemEvent.Data.channel_switch, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.channel_switch));
+            break;
+        case MESH_EVENT_SCAN_DONE:
+            memcpy(&event.Platform.ESPSystemEvent.Data.scan_done, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.scan_done));
+            break;
+        case MESH_EVENT_NETWORK_STATE:
+            memcpy(&event.Platform.ESPSystemEvent.Data.network_state, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.network_state));
+            break;
+        case MESH_EVENT_STOP_RECONNECTION:
+            break;
+        case MESH_EVENT_FIND_NETWORK:
+            memcpy(&event.Platform.ESPSystemEvent.Data.find_network, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.find_network));
+            break;
+        case MESH_EVENT_ROUTER_SWITCH:
+            memcpy(&event.Platform.ESPSystemEvent.Data.router_switch, eventData,
+                   sizeof(event.Platform.ESPSystemEvent.Data.router_switch));
+            break;
+        default:
+            break;
+        }
+    }
+#endif
     sInstance.PostEvent(&event);
 }
 

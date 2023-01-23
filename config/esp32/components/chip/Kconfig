@@ -102,6 +102,12 @@ menu "CHIP Core"
     endmenu # "General Options"
 
     menu "Networking Options"
+    
+    	config MESH_DEVICE
+            bool "Enable esp-mesh network"
+            default n
+            help
+                Deactivate AP feature and activate ESP-MESH 
 
         config NUM_TCP_ENDPOINTS
             int "Max TCP EndPoints"

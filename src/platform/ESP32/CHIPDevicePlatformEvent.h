@@ -29,6 +29,10 @@
 
 #include <esp_event.h>
 
+#ifdef CONFIG_MESH_DEVICE
+#include "esp_mesh.h"
+#endif
+
 namespace chip {
 namespace DeviceLayer {
 
@@ -69,6 +73,31 @@ struct ChipDevicePlatformEvent final
                 wifi_event_ap_staconnected_t WifiApStaConnected;
                 wifi_event_ap_stadisconnected_t WifiApStaDisconnected;
                 wifi_event_ap_probe_req_rx_t WifiApProbeReqRecved;
+
+                mesh_event_channel_switch_t channel_switch;            /**< channel switch */
+                mesh_event_child_connected_t child_connected;          /**< child connected */
+                mesh_event_child_disconnected_t child_disconnected;    /**< child disconnected */
+                mesh_event_routing_table_change_t routing_table;       /**< routing table change */
+                mesh_event_connected_t connected;                      /**< parent connected */
+                mesh_event_disconnected_t disconnected;                /**< parent disconnected */
+                mesh_event_no_parent_found_t no_parent;                /**< no parent found */
+                mesh_event_layer_change_t layer_change;                /**< layer change */
+                mesh_event_toDS_state_t toDS_state;                    /**< toDS state, devices shall check this state firstly before trying to send packets to
+                                                                            external IP network. This state indicates right now whether the root is capable of sending
+                                                                            packets out. If not, devices had better to wait until this state changes to be
+                                                                            MESH_TODS_REACHABLE. */
+#ifdef CONFIG_MESH_DEVICE
+                mesh_event_vote_started_t vote_started;                /**< vote started */
+                mesh_event_root_address_t root_addr;                   /**< root address */
+                mesh_event_root_switch_req_t switch_req;               /**< root switch request */
+                mesh_event_root_conflict_t root_conflict;              /**< other powerful root */
+                mesh_event_root_fixed_t root_fixed;                    /**< fixed root */
+                mesh_event_scan_done_t scan_done;                      /**< scan done */
+                mesh_event_network_state_t network_state;              /**< network state, such as whether current mesh network has a root. */
+                mesh_event_find_network_t find_network;                /**< network found that can join */
+                mesh_event_router_switch_t router_switch;              /**< new router information */
+                mesh_event_ps_duty_t ps_duty;                          /**< PS duty information */
+#endif
             } Data;
         } ESPSystemEvent;
     };
