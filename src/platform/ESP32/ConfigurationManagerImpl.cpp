@@ -53,7 +53,7 @@ enum
 /** Singleton instance of the ConfigurationManager implementation object for the ESP32.
  */
 ConfigurationManagerImpl ConfigurationManagerImpl::sInstance;
-    /*  JLIZI   */
+#ifdef CONFIG_MESH_DEVICE
 #define CONFIG_MESH_ROUTE_TABLE_SIZE 50
 typedef struct mesh_netif_driver* mesh_netif_driver_t;
 /*******************************************************
@@ -310,8 +310,7 @@ esp_err_t ConnectivityManagerImpl::mesh_netifs_stop(void)
     start_wifi_link_sta();
     return ESP_OK;
 }
-
-    /*  JLIZI   */
+#endif
 
 CHIP_ERROR ConfigurationManagerImpl::_Init()
 {

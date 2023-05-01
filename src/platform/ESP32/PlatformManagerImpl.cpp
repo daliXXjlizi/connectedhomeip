@@ -37,9 +37,9 @@
 #include "esp_system.h"
 #include "esp_wifi.h"
 
-    /*  JLIZI   */
+#ifdef CONFIG_MESH_DEVICE
 #include "esp_mesh.h"
-    /*  JLIZI   */
+#endif
 namespace chip {
 namespace DeviceLayer {
 
@@ -73,19 +73,19 @@ CHIP_ERROR PlatformManagerImpl::_InitChipStack(void)
     // Arrange for the ESP event loop to deliver events into the CHIP Device layer.
     err = esp_event_loop_create_default();
     SuccessOrExit(err);
-    /*  JLIZI   */
-    //esp_netif_create_default_wifi_ap();
-    //esp_netif_create_default_wifi_sta();
+    #ifndef CONFIG_MESH_DEVICE
+    esp_netif_create_default_wifi_ap();
+    esp_netif_create_default_wifi_sta();
+    #else
     ConnectivityManagerImpl().mesh_netif_init_station();
-    /*  JLIZI   */
+    esp_event_handler_register(MESH_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
+    SuccessOrExit(err);
+    #endif
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
     SuccessOrExit(err);
     esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
     SuccessOrExit(err);
-    /*  JLIZI   */
-    esp_event_handler_register(MESH_EVENT, ESP_EVENT_ANY_ID, PlatformManagerImpl::HandleESPSystemEvent, NULL);
-    SuccessOrExit(err);
-    /*  JLIZI   */
+
     // Initialize the ESP WiFi layer.
     cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
@@ -187,7 +187,7 @@ void PlatformManagerImpl::HandleESPSystemEvent(void * arg, esp_event_base_t even
             break;
         }
     }
-    /*  JLIZI   */
+#ifdef CONFIG_MESH_DEVICE
     else if (eventBase == MESH_EVENT)
     {
         switch (eventId)
@@ -283,7 +283,7 @@ void PlatformManagerImpl::HandleESPSystemEvent(void * arg, esp_event_base_t even
             break;
         }
     }
-    /*  JLIZI   */
+#endif
     sInstance.PostEvent(&event);
 }
 

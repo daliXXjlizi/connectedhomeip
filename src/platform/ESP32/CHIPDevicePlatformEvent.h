@@ -28,9 +28,11 @@
 #include <platform/CHIPDeviceEvent.h>
 
 #include <esp_event.h>
-    /*  JLIZI   */
+
+#ifdef CONFIG_MESH_DEVICE
 #include "esp_mesh.h"
-    /*  JLIZI   */
+#endif
+
 namespace chip {
 namespace DeviceLayer {
 
@@ -72,8 +74,6 @@ struct ChipDevicePlatformEvent final
                 wifi_event_ap_stadisconnected_t WifiApStaDisconnected;
                 wifi_event_ap_probe_req_rx_t WifiApProbeReqRecved;
 
-
-/*  JLIZI   */
                 mesh_event_channel_switch_t channel_switch;            /**< channel switch */
                 mesh_event_child_connected_t child_connected;          /**< child connected */
                 mesh_event_child_disconnected_t child_disconnected;    /**< child disconnected */
@@ -86,6 +86,7 @@ struct ChipDevicePlatformEvent final
                                                                             external IP network. This state indicates right now whether the root is capable of sending
                                                                             packets out. If not, devices had better to wait until this state changes to be
                                                                             MESH_TODS_REACHABLE. */
+#ifdef CONFIG_MESH_DEVICE
                 mesh_event_vote_started_t vote_started;                /**< vote started */
                 mesh_event_root_address_t root_addr;                   /**< root address */
                 mesh_event_root_switch_req_t switch_req;               /**< root switch request */
@@ -96,7 +97,7 @@ struct ChipDevicePlatformEvent final
                 mesh_event_find_network_t find_network;                /**< network found that can join */
                 mesh_event_router_switch_t router_switch;              /**< new router information */
                 mesh_event_ps_duty_t ps_duty;                          /**< PS duty information */
-/*  JLIZI   */
+#endif
             } Data;
         } ESPSystemEvent;
     };

@@ -40,10 +40,11 @@
 #include <lwip/netif.h>
 
 #include <type_traits>
-    /*  JLIZI   */
+
+#ifdef CONFIG_MESH_DEVICE
 #include "esp_mesh.h"
-#include "esp_log.h"
-    /*  JLIZI   */
+#endif
+
 #if !CHIP_DEVICE_CONFIG_ENABLE_WIFI_STATION
 #error "WiFi Station support must be enabled when building for ESP32"
 #endif
@@ -59,15 +60,16 @@ using namespace ::chip::TLV;
 
 namespace chip {
 namespace DeviceLayer {
-        /*  JLIZI   */
+
+#ifdef CONFIG_MESH_DEVICE
 static const char *MESH_TAG = "mesh_main";
 static const uint8_t MESH_ID[6] = { 0x77, 0x77, 0x77, 0x77, 0x77, 0x76};
 static int mesh_layer = -1;
 static esp_ip4_addr_t s_current_ip;
     static mesh_addr_t mesh_parent_addr;
 mesh_cfg_t cfgM = MESH_INIT_CONFIG_DEFAULT();
+#endif
 
-    /*  JLIZI   */
 ConnectivityManagerImpl ConnectivityManagerImpl::sInstance;
 
 ConnectivityManager::WiFiStationMode ConnectivityManagerImpl::_GetWiFiStationMode(void)
@@ -419,7 +421,7 @@ CHIP_ERROR ConnectivityManagerImpl::_Init()
     // Ensure that ESP station mode is enabled.
     err = Internal::ESP32Utils::EnableStationMode();
     SuccessOrExit(err);
-/*
+#ifndef CONFIG_MESH_DEVICE
     // If there is no persistent station provision...
     if (!IsWiFiStationProvisioned())
     {
@@ -454,8 +456,7 @@ CHIP_ERROR ConnectivityManagerImpl::_Init()
             SuccessOrExit(err);
         }
     }
-*/
-    /*  JLIZI   */
+#else
 esp_wifi_start();
 esp_mesh_init();
 memcpy((uint8_t *) &cfgM.mesh_id, MESH_ID, 6);
@@ -471,7 +472,7 @@ memcpy((uint8_t *) &cfgM.mesh_ap.password, CONFIG_MESH_AP_PASSWD,
            strlen(CONFIG_MESH_AP_PASSWD));
 ESP_ERROR_CHECK(esp_mesh_set_config(&cfgM));
 //ESP_ERROR_CHECK(esp_mesh_start());
-    /*  JLIZI   */
+#endif
 
     // Force AP mode off for now.
     err = Internal::ESP32Utils::SetAPMode(false);
@@ -492,7 +493,7 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
     // Handle ESP system events...
     if (event->Type == DeviceEventType::kESPSystemEvent)
     {
-            /*  JLIZI   */
+#ifdef CONFIG_MESH_DEVICE
         if (event->Platform.ESPSystemEvent.Base == MESH_EVENT)
         {
             mesh_addr_t id = {0,};
@@ -519,12 +520,12 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
                         MAC2STR(event->Platform.ESPSystemEvent.Data.child_disconnected.mac));
                 break;
             case MESH_EVENT_ROUTING_TABLE_ADD: 
-                ESP_LOGW(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_ADD>add %d, new:%d", \
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_ADD>add %d, new:%d", \
                         event->Platform.ESPSystemEvent.Data.routing_table.rt_size_change, \
                         event->Platform.ESPSystemEvent.Data.routing_table.rt_size_new);
                 break;
             case MESH_EVENT_ROUTING_TABLE_REMOVE: 
-                ESP_LOGW(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_REMOVE>remove %d, new:%d",
+                ESP_LOGI(MESH_TAG, "<MESH_EVENT_ROUTING_TABLE_REMOVE>remove %d, new:%d",
                         event->Platform.ESPSystemEvent.Data.routing_table.rt_size_change,
                         event->Platform.ESPSystemEvent.Data.routing_table.rt_size_new);
                 break;
@@ -631,7 +632,7 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
                 break;
             }
         }
-            /*  JLIZI   */
+#endif
         if (event->Platform.ESPSystemEvent.Base == WIFI_EVENT)
         {
             switch (event->Platform.ESPSystemEvent.Id)
@@ -686,7 +687,7 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
             case IP_EVENT_STA_GOT_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_GOT_IP");
                 OnStationIPv4AddressAvailable(event->Platform.ESPSystemEvent.Data.IpGotIp);
-                //esp_mesh_start();
+                esp_mesh_start();
                 break;
             case IP_EVENT_STA_LOST_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_LOST_IP");
