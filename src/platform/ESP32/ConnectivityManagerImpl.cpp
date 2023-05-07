@@ -471,7 +471,7 @@ cfgM.mesh_ap.max_connection = CONFIG_MESH_AP_CONNECTIONS;
 memcpy((uint8_t *) &cfgM.mesh_ap.password, CONFIG_MESH_AP_PASSWD,
            strlen(CONFIG_MESH_AP_PASSWD));
 ESP_ERROR_CHECK(esp_mesh_set_config(&cfgM));
-//ESP_ERROR_CHECK(esp_mesh_start());
+ESP_ERROR_CHECK(esp_mesh_start());
 #endif
 
     // Force AP mode off for now.
@@ -481,8 +481,10 @@ ESP_ERROR_CHECK(esp_mesh_set_config(&cfgM));
     // Queue work items to bootstrap the AP and station state machines once the Chip event loop is running.
     err = SystemLayer.ScheduleWork(DriveStationState, NULL);
     SuccessOrExit(err);
+    #ifndef CONFIG_MESH_DEVICE
     err = SystemLayer.ScheduleWork(DriveAPState, NULL);
     SuccessOrExit(err);
+    #endif
 
 exit:
     return err;
@@ -687,7 +689,7 @@ void ConnectivityManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
             case IP_EVENT_STA_GOT_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_GOT_IP");
                 OnStationIPv4AddressAvailable(event->Platform.ESPSystemEvent.Data.IpGotIp);
-                esp_mesh_start();
+                //esp_mesh_start();
                 break;
             case IP_EVENT_STA_LOST_IP:
                 ChipLogProgress(DeviceLayer, "IP_EVENT_STA_LOST_IP");

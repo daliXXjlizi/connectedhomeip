@@ -503,7 +503,7 @@ std::string createSetupPayload()
     if (!isRendezvousBLE())
     {
         char gw_ip[INET6_ADDRSTRLEN];
-        GetGatewayIP(gw_ip, sizeof(gw_ip));
+        //GetGatewayIP(gw_ip, sizeof(gw_ip));
         payload.addOptionalVendorData(EXAMPLE_VENDOR_TAG_IP, gw_ip);
 
         QRCodeSetupPayloadGenerator generator(payload);
