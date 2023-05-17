@@ -69,13 +69,10 @@ CHIP_ERROR CHIPDeviceManager::Init(CHIPDeviceManagerCallbacks * cb)
     {
         // TODO(cecille): Fix for the case where BLE and SoftAP are both enabled.`
         ConnectivityMgr().SetBLEAdvertisingEnabled(false);
-        //ConnectivityMgr().SetWiFiAPMode(ConnectivityManager::kWiFiAPMode_Enabled);
     }
     else
     {
-        // If rendezvous is bypassed, enable SoftAP so that the device can still
-        // be communicated with via its SoftAP as needed.
-        //ConnectivityMgr().SetWiFiAPMode(ConnectivityManager::kWiFiAPMode_Enabled);
+
     }
 
     err = Platform::MemoryInit();
